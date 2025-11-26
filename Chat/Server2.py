@@ -1,5 +1,7 @@
 import socket
 import threading
+import requests
+from datetime import datetime
 
 HOST = '0.0.0.0'
 PORT = 5000
@@ -51,6 +53,7 @@ def handle_client(conn, addr):
                 with clients_lock:
                     users_list = ", ".join(clients.values())
                 conn.sendall(f"[Sistema] Usuarios conectados: {users_list}\n".encode('utf-8'))
+
             elif msg.lower().startswith("/nick "):
                 new_name = msg[6:].strip()
                 if new_name and new_name not in clients.values():
@@ -59,10 +62,31 @@ def handle_client(conn, addr):
                     broadcast(f"[Sistema] {old_name} ahora es {new_name}\n")
                 else:
                     conn.sendall("[Sistema] Nombre inválido o ya en uso.\n".encode('utf-8'))
+
             elif msg.lower() in ("/quit", "/exit"):
                 break
+
             else:
-                broadcast(f"{clients[conn]}: {msg}\n")
+                usuario = clients[conn]
+                mensaje = msg
+                fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # 1. Enviar mensaje a todos los clientes
+                broadcast(f"{usuario}: {mensaje}\n")
+
+                # 2. Guardarlo en Laravel API
+                try:
+                    requests.post(
+                        "http://127.0.0.1:8000/api/mensajes/crear",
+                        data={
+                            "usuario": usuario,
+                            "mensaje": mensaje,
+                            "fecha_hora": fecha_hora
+                        },
+                        timeout=3
+                    )
+                except Exception as e:
+                    print(f"ERROR al enviar a la API: {e}")
 
     finally:
         with clients_lock:
